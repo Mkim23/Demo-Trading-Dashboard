@@ -91,6 +91,10 @@
   .q-b  { color: var(--amber); }
   .q-c  { color: var(--red); }
 
+  .metric-comp { font-size: 10px; color: var(--muted); margin-top: 4px; padding: 2px 7px; background: rgba(90,96,112,.12); border: 1px solid rgba(90,96,112,.25); border-radius: 4px; display: inline-block; font-family: var(--mono); }
+  .banner-stat { font-size: 11px; color: var(--muted); }
+  .banner-stat span { font-family: var(--mono); font-weight: 600; margin-left: 4px; }
+
   /* stats table */
   .stats-table { width: 100%; border-collapse: collapse; font-size: 12px; }
   .stats-table th { font-size: 11px; color: var(--muted); padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -122,21 +126,25 @@
     <div class="metric">
       <div class="metric-label">勝率</div>
       <div class="metric-value" id="m-winrate">--%</div>
+      <div class="metric-comp" id="c-winrate" style="display:none"></div>
       <div class="metric-sub" id="m-wl">-- 勝 / -- 負</div>
     </div>
     <div class="metric">
       <div class="metric-label">平均盈虧比</div>
       <div class="metric-value" id="m-rr">--</div>
+      <div class="metric-comp" id="c-rr" style="display:none"></div>
       <div class="metric-sub">平均獲利 ÷ 平均虧損</div>
     </div>
     <div class="metric">
       <div class="metric-label">獲利因子</div>
       <div class="metric-value" id="m-pf">--</div>
+      <div class="metric-comp" id="c-pf" style="display:none"></div>
       <div class="metric-sub">Profit Factor</div>
     </div>
     <div class="metric">
       <div class="metric-label">總已實現盈虧</div>
       <div class="metric-value" id="m-pnl">--</div>
+      <div class="metric-comp" id="c-pnl" style="display:none"></div>
       <div class="metric-sub" id="m-trades">-- 筆已完成</div>
     </div>
     <div class="metric">
@@ -156,10 +164,27 @@
     </div>
   </div>
 
+  <!-- 方案二：篩選摘要橫幅 -->
+  <div id="filter-stats-banner" style="display:none;background:rgba(77,159,255,.07);border:1px solid rgba(77,159,255,.2);border-radius:10px;padding:12px 18px;margin-bottom:20px">
+    <div style="font-size:11px;color:#4d9fff;font-weight:500;margin-bottom:8px" id="banner-title"></div>
+    <div style="display:flex;gap:24px;flex-wrap:wrap" id="banner-stats"></div>
+  </div>
+
   <!-- 淨值曲線 + 各商品 -->
   <div class="two-col">
     <div class="card">
-      <div class="card-title">淨值曲線</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div class="card-title" style="margin:0">淨值曲線</div>
+        <div style="display:flex;gap:12px;font-size:11px">
+          <span style="display:flex;align-items:center;gap:5px;color:var(--muted)">
+            <span style="display:inline-block;width:20px;height:2px;background:#2a3a50;border-radius:1px"></span>全部
+          </span>
+          <span id="legend-filtered" style="display:none;align-items:center;gap:5px;color:#4d9fff">
+            <span style="display:inline-block;width:20px;height:2px;background:#4d9fff;border-radius:1px"></span>
+            <span id="legend-filtered-label">篩選</span>
+          </span>
+        </div>
+      </div>
       <div class="chart-wrap"><canvas id="equityChart"></canvas></div>
     </div>
     <div class="card">
@@ -279,7 +304,10 @@ function dirBadge(d) {
 
 // ── 全域資料 ──────────────────────────────────────────────
 let G = null;
-let equityChart = null;
+let equityChart    = null;
+let allStats       = null;
+let allCurveLabels = [];
+let allCurveValues = [];
 const PER_PAGE  = 15;
 const tradesState = { page: 1, symbol: "all", result: "all", session: "all" };
 
@@ -359,6 +387,17 @@ function renderMetrics() {
   todayEl.className = "metric-value " + colorClass(todayTotal);
   document.getElementById("m-today-sub").textContent =
     `今日已實現 ${fmtSign(s.today_realized||0)}`;
+
+  // 儲存全部指標供篩選對照
+  allStats = {
+    win_rate:      s.win_rate,
+    rr_ratio:      s.rr_ratio,
+    profit_factor: s.profit_factor,
+    total_pnl:     s.total_pnl,
+    wins:          s.wins,
+    losses:        s.losses,
+    total_trades:  s.total_trades,
+  };
 }
 
 function renderEquityCurve() {
@@ -366,13 +405,21 @@ function renderEquityCurve() {
   if (!curve.length) return;
   const labels = curve.map(p => p.time);
   const values = curve.map(p => p.value);
+  allCurveLabels = labels;
+  allCurveValues = values;
   if (!equityChart) {
     const ctx = document.getElementById("equityChart").getContext("2d");
     equityChart = new Chart(ctx, {
       type: "line",
-      data: { labels, datasets: [{ data: values, borderColor: "#00e5a0", backgroundColor: "rgba(0,229,160,0.07)", borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: "#00e5a0", fill: true, tension: 0.3 }] },
+      data: {
+        labels,
+        datasets: [
+          { label:"全部", data: values, borderColor:"#2a3a50", borderWidth:1.5, pointRadius:2, pointBackgroundColor:"#2a3a50", fill:false, tension:0.3, spanGaps:true },
+          { label:"篩選", data:[], borderColor:"#4d9fff", backgroundColor:"rgba(77,159,255,0.08)", borderWidth:2, pointRadius:3, pointBackgroundColor:"#4d9fff", fill:true, tension:0.3, hidden:true, spanGaps:true }
+        ]
+      },
       options: {
-        responsive: true, maintainAspectRatio: false,
+        responsive: true, maintainAspectRatio: false, animation: false,
         plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => "$" + ctx.parsed.y.toFixed(2) } } },
         scales: {
           x: { grid: { color: "#1e2330" }, ticks: { color: "#5a6070", font: { size: 10 }, maxTicksLimit: 6 } },
@@ -383,7 +430,7 @@ function renderEquityCurve() {
   } else {
     equityChart.data.labels = labels;
     equityChart.data.datasets[0].data = values;
-    equityChart.update();
+    equityChart.update("none");
   }
 }
 
@@ -529,6 +576,112 @@ function renderTrades() {
   ].filter(Boolean).join(" · ");
   document.getElementById("trades-summary-text").textContent =
     desc ? `篩選：${desc}　共 ${total} 筆` : `共 ${total} 筆`;
+
+  // 篩選聯動：指標卡對照、橫幅、雙軌曲線
+  updateFilterStats(tradesState, total, filtered);
+}
+
+function updateFilterStats(filters, filteredTotal, filteredTrades) {
+  const isFiltered = filters.symbol!=="all"||filters.result!=="all"||filters.session!=="all";
+  if (!isFiltered || !allStats) {
+    ["winrate","rr","pf","pnl"].forEach(k=>{ document.getElementById("c-"+k).style.display="none"; });
+    document.getElementById("filter-stats-banner").style.display = "none";
+    document.getElementById("legend-filtered").style.display = "none";
+    if (equityChart) {
+      equityChart.data.labels = allCurveLabels;
+      equityChart.data.datasets[0].data = allCurveValues;
+      equityChart.data.datasets[0].borderColor = "#00e5a0";
+      equityChart.data.datasets[0].backgroundColor = "rgba(0,229,160,0.07)";
+      equityChart.data.datasets[0].pointBackgroundColor = "#00e5a0";
+      equityChart.data.datasets[1].hidden = true;
+      equityChart.update("none");
+    }
+    return;
+  }
+
+  const closed  = filteredTrades.filter(t=>t.status==="closed"&&t.profit!=null);
+  const wins    = closed.filter(t=>t.profit>0);
+  const losses  = closed.filter(t=>t.profit<=0);
+  const fWR     = closed.length>0 ? (wins.length/closed.length*100).toFixed(1) : "--";
+  const fPNL    = closed.reduce((s,t)=>s+t.profit,0);
+  const avgWin  = wins.length>0   ? wins.reduce((s,t)=>s+t.profit,0)/wins.length     : 0;
+  const avgLoss = losses.length>0 ? losses.reduce((s,t)=>s+t.profit,0)/losses.length : 0;
+  const fRR     = avgLoss!==0 ? Math.abs(avgWin/avgLoss).toFixed(2) : "--";
+  const grossW  = wins.reduce((s,t)=>s+t.profit,0);
+  const grossL  = Math.abs(losses.reduce((s,t)=>s+t.profit,0)||1);
+  const fPF     = grossW>0 ? (grossW/grossL).toFixed(2) : "--";
+  const fWRCol  = parseFloat(fWR)>=50?"var(--accent)":parseFloat(fWR)>=40?"var(--amber)":"var(--red)";
+  const fPFCol  = parseFloat(fPF)>=1.5?"var(--accent)":parseFloat(fPF)>=1?"var(--amber)":"var(--red)";
+  const fRRCol  = parseFloat(fRR)>=2?"var(--accent)":parseFloat(fRR)>=1?"var(--amber)":"var(--red)";
+  const fPNLCol = fPNL>=0?"var(--accent)":"var(--red)";
+
+  // 方案一：對照小字
+  const allWRCol  = allStats.win_rate>=50?"var(--accent)":allStats.win_rate>=40?"var(--amber)":"var(--red)";
+  const allPFCol  = allStats.profit_factor>=1.5?"var(--accent)":allStats.profit_factor>=1?"var(--amber)":"var(--red)";
+  const allRRCol  = allStats.rr_ratio>=2?"var(--accent)":allStats.rr_ratio>=1?"var(--amber)":"var(--red)";
+  const allPNLCol = allStats.total_pnl>=0?"var(--accent)":"var(--red)";
+
+  document.getElementById("m-winrate").textContent = fWR!=="--"?fWR+"%":"--";
+  document.getElementById("m-winrate").className   = "metric-value "+(parseFloat(fWR)>=50?"green":parseFloat(fWR)>=40?"amber":"red");
+  document.getElementById("m-wl").textContent      = `${wins.length} 勝 / ${losses.length} 負`;
+  document.getElementById("c-winrate").style.display = "inline-block";
+  document.getElementById("c-winrate").innerHTML   = `全部：<span style="color:${allWRCol}">${allStats.win_rate}%</span>`;
+
+  document.getElementById("m-rr").textContent = fRR;
+  document.getElementById("c-rr").style.display = "inline-block";
+  document.getElementById("c-rr").innerHTML = `全部：<span style="color:${allRRCol}">${allStats.rr_ratio||"--"}</span>`;
+
+  document.getElementById("m-pf").textContent = fPF;
+  document.getElementById("c-pf").style.display = "inline-block";
+  document.getElementById("c-pf").innerHTML = `全部：<span style="color:${allPFCol}">${allStats.profit_factor||"--"}</span>`;
+
+  document.getElementById("m-pnl").textContent = (fPNL>=0?"+":"")+fmtSign(fPNL).replace("+","").replace("-","");
+  document.getElementById("m-pnl").className   = "metric-value "+colorClass(fPNL);
+  document.getElementById("m-trades").textContent = `${closed.length} 筆（篩選後）`;
+  document.getElementById("c-pnl").style.display = "inline-block";
+  document.getElementById("c-pnl").innerHTML = `全部：<span style="color:${allPNLCol}">${fmtSign(allStats.total_pnl)}</span>`;
+
+  // 方案二：橫幅
+  const labelParts = [
+    filters.symbol!=="all"?filters.symbol.replace("#",""):"",
+    filters.session!=="all"?filters.session:"",
+    filters.result!=="all"?{win:"獲利",loss:"虧損",open:"持倉中"}[filters.result]:"",
+  ].filter(Boolean).join(" · ");
+  document.getElementById("filter-stats-banner").style.display = "block";
+  document.getElementById("banner-title").textContent = `篩選：${labelParts}　共 ${filteredTotal} 筆`;
+  document.getElementById("banner-stats").innerHTML = [
+    ["勝率", fWR!=="--"?fWR+"%":"--", fWRCol],
+    ["獲利因子", fPF, fPFCol],
+    ["總盈虧", (fPNL>=0?"+":"")+`$${Math.abs(fPNL).toFixed(2)}`, fPNLCol],
+    ["盈虧比", fRR, fRRCol],
+  ].map(([n,v,c])=>`<div class="banner-stat">${n}<span style="color:${c}">${v}</span></div>`).join("");
+
+  // 方案三：雙軌曲線
+  if (equityChart) {
+    equityChart.data.datasets[0].borderColor = "#2a3a50";
+    equityChart.data.datasets[0].backgroundColor = "transparent";
+    equityChart.data.datasets[0].pointBackgroundColor = "#2a3a50";
+    const closedSorted = [...closed].sort((a,b)=>(a.close_time||"").localeCompare(b.close_time||""));
+    if (closedSorted.length > 1) {
+      const base = allCurveValues[0]||100000;
+      let running = base - closedSorted.reduce((s,t)=>s+t.profit,0);
+      const fLabels=[], fValues=[];
+      closedSorted.forEach(t=>{
+        running+=t.profit;
+        fLabels.push(t.close_time?t.close_time.slice(0,10):"");
+        fValues.push(parseFloat(running.toFixed(2)));
+      });
+      equityChart.data.datasets[1].data   = fValues;
+      equityChart.data.datasets[1].hidden = false;
+      equityChart.data.labels = fLabels;
+      document.getElementById("legend-filtered").style.display = "flex";
+      document.getElementById("legend-filtered-label").textContent = labelParts;
+    } else {
+      equityChart.data.datasets[1].hidden = true;
+      document.getElementById("legend-filtered").style.display = "none";
+    }
+    equityChart.update("none");
+  }
 }
 
 function goPage(p) { tradesState.page = p; renderTrades(); }
