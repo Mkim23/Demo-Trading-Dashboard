@@ -653,7 +653,7 @@ function updateFilterStats(filters, filteredTotal, filteredTrades) {
     ["勝率", fWR!=="--"?fWR+"%":"--", fWRCol],
     ["獲利因子", fPF, fPFCol],
     ["總盈虧", (fPNL>=0?"+":"")+`$${Math.abs(fPNL).toFixed(2)}`, fPNLCol],
-    ["盈虧比", fRR, fRRCol],
+    ["平均盈虧比", fRR, fRRCol],
   ].map(([n,v,c])=>`<div class="banner-stat">${n}<span style="color:${c}">${v}</span></div>`).join("");
 
   // 方案三：雙軌曲線
