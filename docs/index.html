@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Trading Dashboard — Eli 空間式交易法</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root {
+    --bg:      #0d0f14; --surface: #13161e; --border: #1e2330;
+    --accent:  #00e5a0; --red:     #ff4d6a; --amber:  #f5a623;
+    --text:    #e8eaf0; --muted:   #5a6070;
+    --mono:    'JetBrains Mono', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; font-size: 13px; line-height: 1.5; }
+  .shell   { max-width: 1280px; margin: 0 auto; padding: 24px 20px; }
+  .header  { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; flex-wrap: wrap; gap: 10px; }
+  .logo    { font-size: 18px; font-weight: 600; letter-spacing: -.3px; }
+  .logo span { color: var(--accent); }
+  .header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .last-update { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .status-dot  { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--amber); margin-right: 6px; }
+  .readonly-badge { font-size: 10px; background: rgba(245,166,35,.15); color: var(--amber); border: 1px solid rgba(245,166,35,.3); padding: 2px 8px; border-radius: 4px; font-family: var(--mono); }
+
+  /* metrics */
+  .metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
+  @media(max-width:900px){ .metrics{ grid-template-columns: repeat(2,1fr); } }
+  .metric  { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .metric-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px; }
+  .metric-value { font-size: 26px; font-weight: 600; font-family: var(--mono); letter-spacing: -.5px; }
+  .metric-sub   { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .green { color: var(--accent); } .red { color: var(--red); } .amber { color: var(--amber); } .blue { color: #4d9fff; }
+
+  /* two-col */
+  .two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 20px; }
+  @media(max-width:900px){ .two-col{ grid-template-columns:1fr; } }
+
+  /* card */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .card-title { font-size: 12px; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; }
+  .chart-wrap { height: 160px; position: relative; }
+
+  /* symbol bars */
+  .sym-row  { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .sym-row:last-child { margin-bottom: 0; }
+  .sym-name { font-family: var(--mono); font-size: 12px; min-width: 68px; }
+  .sym-bar-bg  { flex: 1; background: var(--border); border-radius: 3px; height: 5px; overflow: hidden; }
+  .sym-bar-fill{ height: 100%; border-radius: 3px; transition: width .6s ease; }
+  .sym-pct  { font-family: var(--mono); font-size: 11px; min-width: 36px; text-align: right; }
+  .sym-pnl  { font-family: var(--mono); font-size: 11px; min-width: 58px; text-align: right; color: var(--muted); }
+
+  /* positions */
+  .pos-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .pos-row:last-child { border-bottom: none; }
+  .dir-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; font-family: var(--mono); }
+  .dir-buy  { background: rgba(0,229,160,.15); color: var(--accent); }
+  .dir-sell { background: rgba(255,77,106,.15); color: var(--red); }
+  .pos-sym  { font-weight: 600; font-family: var(--mono); min-width: 64px; }
+  .pos-detail { color: var(--muted); flex: 1; font-size: 11px; }
+  .pos-pnl  { font-family: var(--mono); font-weight: 500; }
+
+  /* table */
+  .t-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { font-weight: 500; color: var(--muted); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .badge { display: inline-block; font-size: 10px; font-weight: 500; padding: 2px 7px; border-radius: 4px; font-family: var(--mono); }
+  .badge-win  { background: rgba(0,229,160,.12);  color: var(--accent); }
+  .badge-loss { background: rgba(255,77,106,.12); color: var(--red); }
+  .badge-open { background: rgba(77,159,255,.12); color: #4d9fff; }
+  .reason-text { color: var(--muted); font-size: 11px; max-width: 200px; line-height: 1.4; }
+  .mono { font-family: var(--mono); }
+
+  /* filter buttons */
+  .f-btn { font-size: 11px; font-family: var(--mono); font-weight: 500; padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s; }
+  .f-btn:hover  { border-color: #4d9fff; color: #4d9fff; }
+  .f-btn.f-active { background: rgba(77,159,255,.15); border-color: #4d9fff; color: #4d9fff; }
+
+  /* page buttons */
+  .p-btn { font-size: 11px; font-family: var(--mono); padding: 3px 9px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all .15s; min-width: 30px; text-align: center; }
+  .p-btn:hover    { border-color: #4d9fff; color: #4d9fff; }
+  .p-btn.p-active { background: rgba(77,159,255,.15); border-color: #4d9fff; color: #4d9fff; font-weight: 600; }
+  .p-btn:disabled { opacity: .3; cursor: default; }
+
+  /* quality */
+  .q-ap { color: var(--accent); font-weight: 600; }
+  .q-b  { color: var(--amber); }
+  .q-c  { color: var(--red); }
+
+  /* stats table */
+  .stats-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .stats-table th { font-size: 11px; color: var(--muted); padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+  .stats-table td { padding: 8px; border-bottom: 1px solid var(--border); }
+  .stats-table tr:last-child td { border-bottom: none; }
+
+  .empty { text-align: center; color: var(--muted); padding: 32px 0; font-size: 12px; }
+  .divider { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <div class="header">
+    <div class="logo">Trading<span>Bot</span> Dashboard</div>
+    <div class="header-right">
+      <div class="last-update"><span class="status-dot"></span>資料更新：<span id="update-time">--</span></div>
+      <span class="readonly-badge">📖 Read-only 公開版</span>
+    </div>
+  </div>
+
+  <!-- 核心指標 -->
+  <div class="metrics">
+    <div class="metric">
+      <div class="metric-label">帳戶淨值</div>
+      <div class="metric-value green" id="m-equity">--</div>
+      <div class="metric-sub" id="m-balance">餘額 --</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">勝率</div>
+      <div class="metric-value" id="m-winrate">--%</div>
+      <div class="metric-sub" id="m-wl">-- 勝 / -- 負</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">平均盈虧比</div>
+      <div class="metric-value" id="m-rr">--</div>
+      <div class="metric-sub">平均獲利 ÷ 平均虧損</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">獲利因子</div>
+      <div class="metric-value" id="m-pf">--</div>
+      <div class="metric-sub">Profit Factor</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">總已實現盈虧</div>
+      <div class="metric-value" id="m-pnl">--</div>
+      <div class="metric-sub" id="m-trades">-- 筆已完成</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">浮動盈虧</div>
+      <div class="metric-value" id="m-float">--</div>
+      <div class="metric-sub" id="m-open-count">-- 筆持倉中</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">可用保證金</div>
+      <div class="metric-value blue" id="m-margin">--</div>
+      <div class="metric-sub">Free Margin</div>
+    </div>
+    <div class="metric">
+      <div class="metric-label">今日盈虧</div>
+      <div class="metric-value" id="m-today">--</div>
+      <div class="metric-sub" id="m-today-sub">今日已實現</div>
+    </div>
+  </div>
+
+  <!-- 淨值曲線 + 各商品 -->
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">淨值曲線</div>
+      <div class="chart-wrap"><canvas id="equityChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">各商品表現</div>
+      <div id="sym-bars"><div class="empty">暫無資料</div></div>
+    </div>
+  </div>
+
+  <!-- 目前持倉 -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">目前持倉</div>
+    <div id="positions"><div class="empty">目前無持倉</div></div>
+  </div>
+
+  <!-- 交易記錄（分頁＋篩選） -->
+  <div class="card" style="margin-bottom:20px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
+      <div class="card-title" style="margin-bottom:0">交易記錄</div>
+      <div id="trades-summary-text" style="font-size:11px;color:var(--muted);font-family:var(--mono)"></div>
+    </div>
+
+    <!-- 篩選列 -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+      <div style="font-size:11px;color:var(--muted);margin-right:2px">篩選：</div>
+      <div id="filter-symbol" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+      <div class="divider"></div>
+      <div style="display:flex;gap:4px">
+        <button class="f-btn f-active" data-group="result" data-val="all">全部</button>
+        <button class="f-btn" data-group="result" data-val="win">獲利</button>
+        <button class="f-btn" data-group="result" data-val="loss">虧損</button>
+        <button class="f-btn" data-group="result" data-val="open">持倉中</button>
+      </div>
+      <div class="divider"></div>
+      <div style="display:flex;gap:4px">
+        <button class="f-btn f-active" data-group="session" data-val="all">全時段</button>
+        <button class="f-btn" data-group="session" data-val="亞盤">亞盤</button>
+        <button class="f-btn" data-group="session" data-val="歐盤">歐盤</button>
+        <button class="f-btn" data-group="session" data-val="美盤">美盤</button>
+      </div>
+    </div>
+
+    <div class="t-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>商品</th><th>方向</th><th>時段</th>
+            <th>開單時間</th><th>平倉時間</th>
+            <th>手數</th><th>盈虧</th><th>R</th><th>品質</th>
+            <th>狀態</th><th>開單原因</th><th>平倉原因</th>
+          </tr>
+        </thead>
+        <tbody id="trade-tbody">
+          <tr><td colspan="12" class="empty">載入中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;flex-wrap:wrap;gap:8px">
+      <div id="page-info" style="font-size:11px;color:var(--muted);font-family:var(--mono)"></div>
+      <div id="page-btns" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+    </div>
+  </div>
+
+  <!-- 時段績效 -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">⏰ 時段績效分析</div>
+    <div id="session-panel"><div class="empty">累積資料後顯示</div></div>
+  </div>
+
+  <!-- TP後延伸 -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">📈 TP後延伸分析（Post-Exit Continuation）</div>
+    <div id="post-tp-panel"><div class="empty">累積止盈單後顯示（建議 5 筆以上）</div></div>
+  </div>
+
+  <!-- 條件組合學習報告 -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">📚 策略學習報告 — 條件組合統計</div>
+    <div id="learning-panel"><div class="empty">累積 3+ 筆同類型交易後顯示</div></div>
+  </div>
+
+  <!-- 回測摘要 -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-title">📊 回測績效摘要 — Eli 空間式交易法</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px">回測期間：2026-04-06 ~ 2026-06-19（約10週）</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px" id="bt-cards"></div>
+  </div>
+
+  <div style="text-align:center;font-size:11px;color:var(--muted);padding:20px 0">
+    Eli 空間式交易法 Demo 實盤追蹤　•　資料每小時更新（交易時段每15分鐘）　•　模擬帳戶
+  </div>
+
+</div>
+<script>
+// ── 工具函數 ──────────────────────────────────────────────
+function fmt(n) {
+  if (n == null) return "--";
+  return (n < 0 ? "-$" : "$") + Math.abs(n).toFixed(2);
+}
+function fmtSign(n) {
+  if (n == null) return "--";
+  return (n >= 0 ? "+" : "-") + "$" + Math.abs(n).toFixed(2);
+}
+function colorClass(n) {
+  return n == null ? "" : n > 0 ? "green" : n < 0 ? "red" : "";
+}
+function renderQuality(q) {
+  if (!q || q === "N/A") return '<span style="color:var(--muted)">--</span>';
+  return `<span class="${q==="A+"?"q-ap":q==="B"?"q-b":"q-c"}">${q}</span>`;
+}
+function dirBadge(d) {
+  return d === "buy"
+    ? '<span class="dir-badge dir-buy">多</span>'
+    : d === "sell"
+      ? '<span class="dir-badge dir-sell">空</span>'
+      : '<span class="dir-badge" style="background:rgba(90,96,112,.2);color:var(--muted)">?</span>';
+}
+
+// ── 全域資料 ──────────────────────────────────────────────
+let G = null;
+let equityChart = null;
+const PER_PAGE  = 15;
+const tradesState = { page: 1, symbol: "all", result: "all", session: "all" };
+
+// ── 載入資料 ──────────────────────────────────────────────
+async function loadData() {
+  try {
+    const res  = await fetch("data.json?_=" + Date.now());
+    G = await res.json();
+    render();
+  } catch(e) {
+    console.error("data.json 載入失敗", e);
+    document.getElementById("update-time").textContent = "載入失敗";
+  }
+}
+
+// ── 渲染全頁 ──────────────────────────────────────────────
+function render() {
+  if (!G) return;
+  renderMeta();
+  renderMetrics();
+  renderEquityCurve();
+  renderSymBars();
+  renderPositions();
+  renderTrades();
+  renderSessionStats();
+  renderPostTpStats();
+  renderLearning();
+  renderBacktest();
+}
+
+function renderMeta() {
+  document.getElementById("update-time").textContent =
+    G.meta?.updated_at_tw || "--";
+}
+
+function renderMetrics() {
+  const s    = G.summary || {};
+  const live = G.live    || {};
+
+  const equity  = live.equity;
+  const balance = live.balance;
+  const floatPnl = live.profit;
+
+  const eqEl = document.getElementById("m-equity");
+  eqEl.textContent = equity != null ? fmt(equity) : "--";
+  eqEl.className = "metric-value " + colorClass(equity - (balance||0));
+  document.getElementById("m-balance").textContent = "餘額 " + (balance!=null ? fmt(balance) : "--");
+
+  const wrEl = document.getElementById("m-winrate");
+  wrEl.textContent = s.win_rate != null ? s.win_rate + "%" : "--%";
+  wrEl.className = "metric-value " + (s.win_rate >= 50 ? "green" : s.win_rate >= 40 ? "amber" : "red");
+  document.getElementById("m-wl").textContent = `${s.wins||0} 勝 / ${s.losses||0} 負`;
+
+  const rrEl = document.getElementById("m-rr");
+  rrEl.textContent = s.rr_ratio || "--";
+  rrEl.className = "metric-value " + (s.rr_ratio >= 2 ? "green" : s.rr_ratio >= 1 ? "amber" : "red");
+
+  const pfEl = document.getElementById("m-pf");
+  pfEl.textContent = s.profit_factor || "--";
+  pfEl.className = "metric-value " + (s.profit_factor >= 1.5 ? "green" : s.profit_factor >= 1 ? "amber" : "red");
+
+  const pnlEl = document.getElementById("m-pnl");
+  pnlEl.textContent = s.total_pnl != null ? fmtSign(s.total_pnl) : "--";
+  pnlEl.className = "metric-value " + colorClass(s.total_pnl);
+  document.getElementById("m-trades").textContent = (s.total_trades||0) + " 筆已完成";
+
+  const floatEl = document.getElementById("m-float");
+  floatEl.textContent = floatPnl != null ? fmtSign(floatPnl) : "--";
+  floatEl.className = "metric-value " + colorClass(floatPnl);
+  document.getElementById("m-open-count").textContent = (s.open_trades||0) + " 筆持倉中";
+
+  document.getElementById("m-margin").textContent = live.margin != null ? fmt(live.margin) : "--";
+
+  const todayTotal = (s.today_realized||0) + (floatPnl||0);
+  const todayEl = document.getElementById("m-today");
+  todayEl.textContent = fmtSign(todayTotal);
+  todayEl.className = "metric-value " + colorClass(todayTotal);
+  document.getElementById("m-today-sub").textContent =
+    `今日已實現 ${fmtSign(s.today_realized||0)}`;
+}
+
+function renderEquityCurve() {
+  const curve = G.equity_curve || [];
+  if (!curve.length) return;
+  const labels = curve.map(p => p.time);
+  const values = curve.map(p => p.value);
+  if (!equityChart) {
+    const ctx = document.getElementById("equityChart").getContext("2d");
+    equityChart = new Chart(ctx, {
+      type: "line",
+      data: { labels, datasets: [{ data: values, borderColor: "#00e5a0", backgroundColor: "rgba(0,229,160,0.07)", borderWidth: 1.5, pointRadius: 2, pointBackgroundColor: "#00e5a0", fill: true, tension: 0.3 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => "$" + ctx.parsed.y.toFixed(2) } } },
+        scales: {
+          x: { grid: { color: "#1e2330" }, ticks: { color: "#5a6070", font: { size: 10 }, maxTicksLimit: 6 } },
+          y: { grid: { color: "#1e2330" }, ticks: { color: "#5a6070", font: { size: 10 }, callback: v => "$"+v } }
+        }
+      }
+    });
+  } else {
+    equityChart.data.labels = labels;
+    equityChart.data.datasets[0].data = values;
+    equityChart.update();
+  }
+}
+
+function renderSymBars() {
+  const syms = G.sym_stats || {};
+  const colors = { "XAUUSD#":"#00e5a0", "XAGUSD#":"#4d9fff", "US100cash#":"#fb923c" };
+  const el = document.getElementById("sym-bars");
+  const keys = Object.keys(syms);
+  if (!keys.length) { el.innerHTML = '<div class="empty">暫無資料</div>'; return; }
+  el.innerHTML = keys.map(sym => {
+    const st  = syms[sym];
+    const pct = st.win_rate;
+    const col = colors[sym] || (pct >= 55 ? "#00e5a0" : pct >= 45 ? "#f5a623" : "#ff4d6a");
+    const pnlSign = st.pnl >= 0 ? "+" : "";
+    return `<div class="sym-row">
+      <div class="sym-name">${sym.replace("#","")}</div>
+      <div class="sym-bar-bg"><div class="sym-bar-fill" style="width:${pct}%;background:${col}"></div></div>
+      <div class="sym-pct" style="color:${col}">${pct}%</div>
+      <div class="sym-pnl">${pnlSign}$${st.pnl.toFixed(2)}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderPositions() {
+  const live  = G.live || {};
+  const posEl = document.getElementById("positions");
+  if (live.positions && live.positions.length > 0) {
+    posEl.innerHTML = live.positions.map(p => {
+      const pnlCls  = p.profit >= 0 ? "green" : "red";
+      const pnlSign = p.profit >= 0 ? "+" : "";
+      return `<div class="pos-row">
+        <span class="dir-badge ${p.direction==='多'?'dir-buy':'dir-sell'}">${p.direction}</span>
+        <span class="pos-sym">${p.symbol}</span>
+        <span class="pos-detail">入場 ${p.open_price} | SL ${p.sl} | TP ${p.tp} | ${p.lot} 手</span>
+        <span class="pos-pnl ${pnlCls}">${pnlSign}$${p.profit.toFixed(2)}</span>
+      </div>`;
+    }).join("");
+  } else {
+    posEl.innerHTML = '<div class="empty">目前無持倉</div>';
+  }
+}
+
+// ── 交易記錄（前端分頁篩選）─────────────────────────────
+function getFilteredTrades() {
+  let rows = G.trades || [];
+  const { symbol, result, session } = tradesState;
+  if (symbol  !== "all") rows = rows.filter(t => t.symbol === symbol);
+  if (result  === "win")  rows = rows.filter(t => t.status==="closed" && t.profit > 0);
+  else if (result === "loss")  rows = rows.filter(t => t.status==="closed" && t.profit <= 0);
+  else if (result === "open")  rows = rows.filter(t => t.status==="open");
+  if (session !== "all") rows = rows.filter(t => t.session === session);
+  return rows;
+}
+
+function renderTradeRow(t) {
+  const pnl    = t.profit;
+  const pnlStr = pnl != null ? fmtSign(pnl) : "--";
+  const pnlCls = colorClass(pnl);
+  const badge  = t.status === "open"
+    ? '<span class="badge badge-open">持倉中</span>'
+    : pnl > 0 ? '<span class="badge badge-win">獲利</span>'
+               : '<span class="badge badge-loss">虧損</span>';
+  const rStr = t.r_multiple != null
+    ? `<span class="${colorClass(t.r_multiple)}">${t.r_multiple>=0?"+":""}${t.r_multiple.toFixed(2)}R</span>`
+    : "--";
+  return `<tr>
+    <td class="mono">${t.symbol}</td>
+    <td>${dirBadge(t.direction)}</td>
+    <td style="font-size:11px;color:var(--muted)">${t.session||"--"}</td>
+    <td class="mono" style="font-size:11px;color:var(--muted)">${(t.open_time||"--").slice(0,16)}</td>
+    <td class="mono" style="font-size:11px;color:var(--muted)">${(t.close_time||"--").slice(0,16)}</td>
+    <td class="mono" style="color:var(--muted)">${t.lot??""}</td>
+    <td class="mono ${pnlCls}">${pnlStr}</td>
+    <td style="font-size:11px">${rStr}</td>
+    <td style="font-size:11px">${renderQuality(t.entry_quality_score)}</td>
+    <td>${badge}</td>
+    <td><div class="reason-text">${t.open_reason||"--"}</div></td>
+    <td><div class="reason-text">${t.close_reason||"--"}</div></td>
+  </tr>`;
+}
+
+function renderTrades() {
+  // 初始化商品篩選按鈕
+  const symGroup = document.getElementById("filter-symbol");
+  if (symGroup && symGroup.children.length === 0) {
+    const symbols = G.symbols || ["all"];
+    symGroup.innerHTML = symbols.map((s, i) =>
+      `<button class="f-btn ${i===0?"f-active":""}" data-group="symbol" data-val="${s}">${
+        s==="all"?"全商品":s.replace("#","")
+      }</button>`
+    ).join("");
+  }
+
+  // 更新 active 狀態
+  document.querySelectorAll(".f-btn").forEach(btn => {
+    btn.classList.toggle("f-active", tradesState[btn.dataset.group] === btn.dataset.val);
+  });
+
+  const filtered    = getFilteredTrades();
+  const total       = filtered.length;
+  const total_pages = Math.max(1, Math.ceil(total / PER_PAGE));
+  tradesState.page  = Math.min(tradesState.page, total_pages);
+  const start = (tradesState.page - 1) * PER_PAGE;
+  const page_rows   = filtered.slice(start, start + PER_PAGE);
+
+  // 表格
+  const tbody = document.getElementById("trade-tbody");
+  tbody.innerHTML = page_rows.length > 0
+    ? page_rows.map(renderTradeRow).join("")
+    : '<tr><td colspan="12" class="empty">此篩選條件無資料</td></tr>';
+
+  // 分頁資訊
+  const end = Math.min(tradesState.page * PER_PAGE, total);
+  document.getElementById("page-info").textContent = total > 0
+    ? `第 ${tradesState.page} / ${total_pages} 頁　${start+1}-${end} 筆 / 共 ${total} 筆` : "";
+
+  // 分頁按鈕
+  const btns = [];
+  btns.push(`<button class="p-btn" onclick="goPage(${tradesState.page-1})" ${tradesState.page<=1?"disabled":""}>‹</button>`);
+  const pages = [];
+  if (total_pages <= 7) { for (let i=1;i<=total_pages;i++) pages.push(i); }
+  else {
+    pages.push(1);
+    if (tradesState.page > 3) pages.push("…");
+    for (let i=Math.max(2,tradesState.page-1); i<=Math.min(total_pages-1,tradesState.page+1); i++) pages.push(i);
+    if (tradesState.page < total_pages-2) pages.push("…");
+    pages.push(total_pages);
+  }
+  pages.forEach(p => {
+    btns.push(p==="…"
+      ? `<span style="color:var(--muted);padding:0 4px;font-size:12px">…</span>`
+      : `<button class="p-btn ${p===tradesState.page?"p-active":""}" onclick="goPage(${p})">${p}</button>`);
+  });
+  btns.push(`<button class="p-btn" onclick="goPage(${tradesState.page+1})" ${tradesState.page>=total_pages?"disabled":""}>›</button>`);
+  document.getElementById("page-btns").innerHTML = btns.join("");
+
+  // 摘要文字
+  const f = tradesState;
+  const desc = [
+    f.symbol!=="all" ? f.symbol.replace("#","") : "",
+    f.result!=="all" ? {win:"獲利",loss:"虧損",open:"持倉中"}[f.result] : "",
+    f.session!=="all" ? f.session : "",
+  ].filter(Boolean).join(" · ");
+  document.getElementById("trades-summary-text").textContent =
+    desc ? `篩選：${desc}　共 ${total} 筆` : `共 ${total} 筆`;
+}
+
+function goPage(p) { tradesState.page = p; renderTrades(); }
+
+document.addEventListener("click", e => {
+  const btn = e.target.closest(".f-btn");
+  if (!btn || !btn.dataset.group) return;
+  tradesState[btn.dataset.group] = btn.dataset.val;
+  tradesState.page = 1;
+  if (G) renderTrades();
+});
+
+// ── 時段績效 ──────────────────────────────────────────────
+function renderSessionStats() {
+  const rows = G.session_stats || [];
+  const el   = document.getElementById("session-panel");
+  if (!rows.length) { el.innerHTML = '<div class="empty">累積資料後顯示</div>'; return; }
+  el.innerHTML = `<table class="stats-table">
+    <thead><tr>
+      <th>時段</th><th>商品</th><th>筆數</th><th>勝率</th>
+      <th>總盈虧</th><th>平均MAE(R)</th><th>平均MFE(R)</th><th>抓住率</th>
+    </tr></thead><tbody>` +
+    rows.map(r => {
+      const wrCol = r.win_rate >= 55 ? "var(--accent)" : r.win_rate >= 40 ? "var(--amber)" : "var(--red)";
+      const cap   = r.avg_capture_rate ? (r.avg_capture_rate * 100).toFixed(0) + "%" : "--";
+      return `<tr>
+        <td>${r.session}</td>
+        <td class="mono">${r.symbol}</td>
+        <td>${r.total}</td>
+        <td style="color:${wrCol};font-family:var(--mono)">${r.win_rate}%</td>
+        <td class="mono ${colorClass(r.total_pnl)}">${fmtSign(r.total_pnl)}</td>
+        <td class="mono" style="color:var(--muted)">${r.avg_mae_r?.toFixed(2)??"-"}</td>
+        <td class="mono" style="color:var(--muted)">${r.avg_mfe_r?.toFixed(2)??"-"}</td>
+        <td class="mono" style="color:var(--muted)">${cap}</td>
+      </tr>`;
+    }).join("") + "</tbody></table>";
+}
+
+// ── Post-TP 延伸 ──────────────────────────────────────────
+function renderPostTpStats() {
+  const rows = G.post_tp_stats || [];
+  const el   = document.getElementById("post-tp-panel");
+  if (!rows.length) { el.innerHTML = '<div class="empty">累積止盈單後顯示（建議 5 筆以上）</div>'; return; }
+  el.innerHTML = `<table class="stats-table">
+    <thead><tr>
+      <th>商品</th><th>時段</th><th>方向</th><th>樣本</th>
+      <th>平均延伸(R)</th><th>平均延續K棒</th><th>超過1R比例</th><th>平均反轉K棒</th>
+    </tr></thead><tbody>` +
+    rows.map(r => {
+      const extCol = r.avg_extension_r >= 1.5 ? "var(--accent)" : r.avg_extension_r >= 0.8 ? "var(--amber)" : "var(--muted)";
+      const tip = r.avg_extension_r >= 1.5 && r.pct_extend_over_1r >= 60
+        ? ' <span style="color:var(--accent);font-size:10px">→ 可考慮提高TP</span>' : "";
+      return `<tr>
+        <td class="mono">${r.symbol}</td>
+        <td>${r.session}</td>
+        <td>${r.direction === "buy" ? "多" : "空"}</td>
+        <td>${r.total}</td>
+        <td class="mono" style="color:${extCol}">${r.avg_extension_r?.toFixed(2)??"-"}R${tip}</td>
+        <td class="mono" style="color:var(--muted)">${r.avg_continuation_bars?.toFixed(1)??"-"}</td>
+        <td class="mono" style="color:var(--muted)">${r.pct_extend_over_1r?.toFixed(0)??"-"}%</td>
+        <td class="mono" style="color:var(--muted)">${r.avg_reversal_bar?.toFixed(1)??"-"}</td>
+      </tr>`;
+    }).join("") + "</tbody></table>";
+}
+
+// ── 條件組合學習報告 ──────────────────────────────────────
+function renderLearning() {
+  const rows = G.pattern_stats || [];
+  const el   = document.getElementById("learning-panel");
+  if (!rows.length) { el.innerHTML = '<div class="empty">累積 3+ 筆同類型交易後顯示</div>'; return; }
+  el.innerHTML = `<table class="stats-table">
+    <thead><tr>
+      <th>條件組合</th><th>筆數</th><th>勝率</th><th>總盈虧</th>
+    </tr></thead><tbody>` +
+    rows.map(r => {
+      const col  = r.win_rate >= 55 ? "var(--accent)" : r.win_rate >= 40 ? "var(--amber)" : "var(--red)";
+      const sign = r.total_pnl >= 0 ? "+" : "";
+      return `<tr>
+        <td>${r.desc}</td>
+        <td>${r.total}</td>
+        <td style="color:${col};font-family:var(--mono)">${r.win_rate}%</td>
+        <td class="mono ${colorClass(r.total_pnl)}">${sign}$${r.total_pnl.toFixed(2)}</td>
+      </tr>`;
+    }).join("") + "</tbody></table>";
+}
+
+// ── 回測摘要（hardcoded）─────────────────────────────────
+function renderBacktest() {
+  const BT = {
+    "XAUUSD": { win_rate:54.9, profit_factor:1.19, total_return:10.2, max_drawdown:11.6, long_wr:53.1, short_wr:56.4, trades:71 },
+    "XAGUSD": { win_rate:60.0, profit_factor:1.48, total_return:13.9, max_drawdown:5.9,  long_wr:60.0, short_wr:60.0, trades:45 },
+    "US100":  { win_rate:53.0, profit_factor:1.12, total_return:5.4,  max_drawdown:12.9, long_wr:45.0, short_wr:65.4, trades:66 },
+  };
+  const colors = { XAUUSD:"#00e5a0", XAGUSD:"#4d9fff", US100:"#fb923c" };
+  document.getElementById("bt-cards").innerHTML = Object.entries(BT).map(([sym, d]) => {
+    const col   = colors[sym];
+    const wrCol = d.win_rate >= 58 ? "var(--accent)" : d.win_rate >= 50 ? "var(--amber)" : "var(--red)";
+    return `<div style="background:var(--border);border-radius:8px;padding:14px">
+      <div style="font-family:var(--mono);font-size:12px;font-weight:600;color:${col};margin-bottom:10px">${sym}</div>
+      ${[
+        ["勝率",     `<span style="color:${wrCol}">${d.win_rate}%</span>`],
+        ["獲利因子", `<span style="color:${d.profit_factor>=1.3?"var(--accent)":d.profit_factor>=1?"var(--amber)":"var(--red)"}">${d.profit_factor}</span>`],
+        ["回測報酬", `<span style="color:var(--accent)">+${d.total_return}%</span>`],
+        ["最大回撤", `<span style="color:var(--red)">${d.max_drawdown}%</span>`],
+        ["做多/做空",`<span style="color:var(--muted)">${d.long_wr}% / ${d.short_wr}%</span>`],
+        ["樣本筆數", `<span>${d.trades} 筆</span>`],
+      ].map(([label, val]) => `
+        <div style="display:flex;justify-content:space-between;font-size:11px;margin:4px 0">
+          <span style="color:var(--muted)">${label}</span>
+          <span style="font-family:var(--mono)">${val}</span>
+        </div>`).join("")}
+    </div>`;
+  }).join("");
+}
+
+// ── 啟動 ─────────────────────────────────────────────────
+loadData();
+setInterval(loadData, 5 * 60 * 1000);  // 每5分鐘重新拉一次 JSON
+</script>
+</body>
+</html>
